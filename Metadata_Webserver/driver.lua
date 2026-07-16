@@ -7,14 +7,9 @@ args["artist"] = "none"
 projectJson = ""
 
 function OnDriverDestroyed()
-   -- Kill all timers in the system...
    if (gDbgTimer ~= 0) then gDbgTimer = C4:KillTimer(gDbgTimer) end
-
-   -- Remove Server Socket...
    C4:DestroyServer()
 end
-
-
 
 function OnPropertyChanged(strProperty)
    local prop = Properties[strProperty]
@@ -29,31 +24,38 @@ function OnPropertyChanged(strProperty)
       dbg("Debug Timer set to 300 Minutes (" .. math.floor((290 / 60) + .5) .. " hours)")
       return
    end
+
+   if (strProperty == "HTTP Port") then
+      local newPort = tonumber(prop)
+      if (newPort and newPort >= 1024 and newPort <= 65535) then
+         if (newPort ~= HTTPPORT) then
+            HTTPPORT = newPort
+            dbg("HTTP Port changed to: " .. newPort)
+            C4:DestroyServer()
+            C4:CreateServer(HTTPPORT)
+         end
+      end
+      return
+   end
+
+   dbg("Property changed: " .. strProperty .. " = " .. tostring(prop))
 end
-
-
 
 function dbg(strDebugText)
    if (g_dbgprint) then print(strDebugText) end
    C4:DebugLog("\r\nWeb Event: " .. strDebugText)
 end
 
-
-
 function ExecuteCommand(strCommand, tParams)
    tParams = tParams or {}
-
    dbg("ExecuteCommand: " .. strCommand)
    for k,v in pairs(tParams) do dbg("" .. k .. ":" .. v) end
-
    if (strCommand == "LUA_ACTION") then
       if (tParams.ACTION == "DEFAULT_ACTION") then
          dbg("Default Action")
       end
    end
 end
-
-
 
 function OnTimerExpired(idTimer)
    if (idTimer == gDbgTimer) then
@@ -68,38 +70,32 @@ function OnTimerExpired(idTimer)
    end
 end
 
-
-
 function MyDriverInit()
-   if (gInitialized ~= nil) then return end  -- Ensure we don't call OnDriverInit multiple times
+   if (gInitialized ~= nil) then return end
    gInitialized = true
    dbg("MyDriverInit()")
-
+   local savedPort = Properties["HTTP Port"]
+   if (savedPort) then
+      local portNum = tonumber(savedPort)
+      if (portNum and portNum >= 1024 and portNum <= 65535) then
+         HTTPPORT = portNum
+      end
+   end
    C4:CreateServer(HTTPPORT)
    C4:AddVariable("COMMAND", "", "STRING")
-
-   dbg("Initialization Complete.")
+   dbg("Initialization Complete. HTTP Port: " .. HTTPPORT)
 end
-
 
 function OnDriverLateInit()
     MyDriverInit()
 end
-
-
 
 function UnURLEscapeHTTP(strURLEscaped)
    temp = string.gsub(strURLEscaped, " ", "%%20")
    return temp
 end
 
-
-
--- ParseStatus parses requests received on port 8080...
 function ParseStatus()
-   --dbg("Received: " .. gRecvBuf)
-
-   -- Parse for events sent from web client, set variable and fire event...
    local _, _, url = string.find(gRecvBuf, "GET /(.*) HTTP")
    url = url or ""
    gCmd = url
@@ -113,24 +109,19 @@ function ParseStatus()
    end
 end
 
------------------------------------------------------
---------------- OTHER FUNCTIONS --------------
------------------------------------------------------
-
-
 function GetWebFile(url,content_type,nHandle)
-   print ("---Getting file: "..url.."---")
+   dbg("---Getting file: "..url.."---")
    url = C4:GetControllerNetworkAddress().."/c4z/Metadata_Webserver/www/"..url
    dbg("URL: "..url)
    C4:urlGet(url, {}, false,
    function(ticketId, strData, responseCode, tHeaders, strError)
       if (strError == nil) then
-         print("UrlGet Success")
+         dbg("UrlGet Success")
          headers = GetHeaders(content_type,strData)
          C4:ServerSend(nHandle,  headers .. strData)
          C4:ServerCloseClient(nHandle)
       else
-         print("C4:urlGet() failed: "..strError)
+         dbg("C4:urlGet() failed: "..strError)
       end
    end
    )
@@ -140,6 +131,12 @@ function GetRoomMedia(roomId)
   local args = {}
   local deviceIconUrl = ""
   local roomMediaXml = C4:GetVariable(tonumber(roomId),1031)
+  
+  if (roomMediaXml == nil or roomMediaXml == "") then
+     dbg("No media info for room " .. tostring(roomId))
+     return args
+  end
+  
   local roomMedia = C4:ParseXml(roomMediaXml)
   if (roomMedia) then
      for i,v in pairs(roomMedia.ChildNodes) do
@@ -147,55 +144,90 @@ function GetRoomMedia(roomId)
      end
 
      local deviceInfoXml = C4:GetDeviceData(tonumber(args["deviceid"]))
+     if (deviceInfoXml == nil or deviceInfoXml == "") then
+        dbg("No device info for deviceid " .. tostring(args["deviceid"]))
+        return args
+     end
+     
      deviceInfoXml = "<data>"..deviceInfoXml.."</data>"
      local deviceInfo = C4:ParseXml(deviceInfoXml)
+     
+     if (deviceInfo == nil) then
+        dbg("Failed to parse device info XML")
+        return args
+     end
+     
      local ip = C4:GetControllerNetworkAddress()
 
-     --Locate Display Icons
      for i1,v1 in pairs(deviceInfo.ChildNodes) do
       if(v1.Name == "capabilities") then
         for i2,v2 in pairs(deviceInfo.ChildNodes[i1].ChildNodes) do
            if (v2.Name == "navigator_display_option") then
              for i3,v3 in pairs(deviceInfo.ChildNodes[i1].ChildNodes[i2].ChildNodes) do
               if (v3.Name == "display_icons") then
-                --for i4,v4 in pairs(deviceInfo.ChildNodes[i1].ChildNodes[i2].ChildNodes[i3].ChildNodes) do
-                --  print("Index: "..i4.."URL: "..v4.Value)
-                --end
                 deviceIconUrl = deviceInfo.ChildNodes[i1].ChildNodes[i2].ChildNodes[i3].ChildNodes[1].Value
-                --print("Final URL: "..deviceIconUrl)
               end
              end
            end
         end
-
       end
-       --print("---")
-       --print("name: "..v.Name.."\nvalue: "..v.Value.."\nChildNodes: "..C4:JsonEncode(v.ChildNodes))
-       --deviceDataArr[v["Name"]] = v.ChildNodes or ""
      end
 
      args["devicename"] = C4:ListGetDeviceName(args["deviceid"]) or ""
 
-     if (args["img"] == nil) then
-      local prefix,path = deviceIconUrl:match("(.+)://(.+)")
-      local basePath,fileName = path:match("(.+)/(.+)")
-
-      local imgUrl = "http://"..ip.."/"..basePath.."/experience_1024.png"
-      local imgUrlFallback = "http://"..ip.."/"..path
-
-      args["img"] = imgUrl
-      args["imgFallback"] = imgUrlFallback
-     else
-      local imgUrl = C4:Base64Decode(args["img"])
-      local prefix,path = imgUrl:match("(.+)://(.+)")
-      if (prefix == "controller") then
-        imgUrl = "http://"..ip.."/"..path
-      end
-      args["img"] = imgUrl
+     local deviceImgUrl = ""
+     local deviceImgFallback = ""
+     
+     dbg("Raw deviceIconUrl: " .. tostring(deviceIconUrl))
+     
+     if (deviceIconUrl and deviceIconUrl ~= "") then
+        local prefix, path = deviceIconUrl:match("(.+)://(.+)")
+        dbg("Icon prefix: " .. tostring(prefix) .. ", path: " .. tostring(path))
+        
+        if (prefix == "driver" and path) then
+           local driverName, remainingPath = path:match("([^/]+)/(.+)")
+           if (driverName and remainingPath) then
+              local halfLen = math.floor(#driverName / 2)
+              local firstHalf = driverName:sub(1, halfLen)
+              local secondHalf = driverName:sub(halfLen + 2)
+              if (firstHalf == secondHalf) then
+                 driverName = firstHalf
+              end
+              local iconDir = remainingPath:match("(.+)/[^/]+$") or ""
+              deviceImgUrl = "http://" .. ip .. "/c4z/" .. driverName .. "/www/" .. iconDir .. "/experience_1024.png"
+              deviceImgFallback = "http://" .. ip .. "/c4z/" .. driverName .. "/www/" .. remainingPath
+              dbg("Converted device icon URL: " .. deviceImgUrl)
+           end
+        elseif (prefix == "controller" and path) then
+           deviceImgUrl = "http://" .. ip .. "/" .. path
+           deviceImgFallback = deviceImgUrl
+        elseif (prefix and path) then
+           deviceImgUrl = deviceIconUrl
+           deviceImgFallback = deviceIconUrl
+        end
      end
+     
+     args["deviceIcon"] = deviceImgUrl
+     args["deviceIconFallback"] = deviceImgFallback
 
+     if (args["img"] == nil or args["img"] == "") then
+        args["img"] = deviceImgUrl
+        args["imgFallback"] = deviceImgFallback
+        dbg("No cover art, using device icon: " .. tostring(deviceImgUrl))
+     else
+        local imgUrl = C4:Base64Decode(args["img"])
+        if (imgUrl and imgUrl ~= "") then
+           local imgPrefix,imgPath = imgUrl:match("(.+)://(.+)")
+           if (imgPrefix == "controller") then
+              imgUrl = "http://"..ip.."/"..imgPath
+           end
+           args["img"] = imgUrl
+        else
+           args["img"] = deviceImgUrl
+           args["imgFallback"] = deviceImgFallback
+        end
+     end
   end
-
   return args
 end
 
@@ -204,17 +236,65 @@ function GetHeaders(ContentType,msg)
    return res
 end
 
------------------------------------------------------
---------------- SERVER SOCKET (feedback) --------------
------------------------------------------------------
-function OnServerConnectionStatusChanged(nHandle, nPort, strStatus)
-   --dbg("OnServerConnectionStatusChanged[" .. nHandle .. " / " .. nPort .. "]: " .. strStatus)
+function GetSettingsJson()
+   local timeFormat = Properties["Time Format"] or "12 Hour"
+   local showTime = Properties["Show Time"] or "Yes"
+   local showDate = Properties["Show Date"] or "Yes"
+   local showWeather = Properties["Show Weather"] or "Yes"
+   local showMedia = Properties["Show Media"] or "Yes"
+   local displayMode = Properties["Display Mode"] or "Normal"
+   local fadeInterval = Properties["Fade Interval"] or "1 Minute"
+   local backgroundColor = Properties["Background Color"] or "#000000"
+   local textColor = Properties["Text Color"] or "#FFFFFF"
+   local mediaPollInterval = Properties["Media Poll Interval"] or "3 Seconds"
+   local settingsPollInterval = Properties["Settings Poll Interval"] or "60 Seconds"
+   
+   local mediaPollMs = 3000
+   if (mediaPollInterval == "1 Second") then mediaPollMs = 1000
+   elseif (mediaPollInterval == "2 Seconds") then mediaPollMs = 2000
+   elseif (mediaPollInterval == "3 Seconds") then mediaPollMs = 3000
+   elseif (mediaPollInterval == "5 Seconds") then mediaPollMs = 5000
+   elseif (mediaPollInterval == "10 Seconds") then mediaPollMs = 10000
+   end
+   
+   local settingsPollMs = 60000
+   if (settingsPollInterval == "5 Seconds") then settingsPollMs = 5000
+   elseif (settingsPollInterval == "10 Seconds") then settingsPollMs = 10000
+   elseif (settingsPollInterval == "30 Seconds") then settingsPollMs = 30000
+   elseif (settingsPollInterval == "60 Seconds") then settingsPollMs = 60000
+   elseif (settingsPollInterval == "5 Minutes") then settingsPollMs = 300000
+   end
+   
+   local fadeIntervalSec = 60
+   if (fadeInterval == "30 Seconds") then fadeIntervalSec = 30
+   elseif (fadeInterval == "1 Minute") then fadeIntervalSec = 60
+   elseif (fadeInterval == "2 Minutes") then fadeIntervalSec = 120
+   elseif (fadeInterval == "5 Minutes") then fadeIntervalSec = 300
+   elseif (fadeInterval == "10 Minutes") then fadeIntervalSec = 600
+   end
+   
+   local settingsTable = {
+      timeFormat = timeFormat,
+      showTime = (showTime == "Yes"),
+      showDate = (showDate == "Yes"),
+      showWeather = (showWeather == "Yes"),
+      showMedia = (showMedia == "Yes"),
+      displayMode = displayMode,
+      fadeInterval = fadeIntervalSec,
+      backgroundColor = backgroundColor,
+      textColor = textColor,
+      mediaPollInterval = mediaPollMs,
+      settingsPollInterval = settingsPollMs
+   }
+   
+   dbg("GetSettingsJson: " .. C4:JsonEncode(settingsTable))
+   return C4:JsonEncode(settingsTable)
 end
 
-
+function OnServerConnectionStatusChanged(nHandle, nPort, strStatus)
+end
 
 function OnServerDataIn(nHandle, strData)
-   --dbg("OnServerDataIn: " .. strData)
    msg = ""
    headers = ""
    args2 = {}
@@ -222,7 +302,7 @@ function OnServerDataIn(nHandle, strData)
    local ret, err = pcall(ParseStatus)
    if (ret ~= true) then
       local e = "Error Parsing return status: " .. err
-      print(e)
+      dbg(e)
       C4:ErrorLog(e)
    end
    gRecvBuf = ""
@@ -232,45 +312,38 @@ function OnServerDataIn(nHandle, strData)
    for i in string.gmatch(gCmd, "[^/]+") do
       urlArgs[#urlArgs+1] = i
    end
-   print("If starting...")
+   dbg("Processing request...")
    if tonumber(gCmd) then
-      print("else reached")
+      dbg("Room ID request: " .. gCmd)
       roomId = gCmd
       res = GetRoomMedia(roomId)
       msg = GetMainHtml(res)
-
       GetWebFile("html/main.html","html",nHandle)
    elseif (urlArgs[2] == "json") then
-      --print("Elseif match 1...")
       roomId = urlArgs[1]
       res = GetRoomMedia(roomId)
       msg = C4:JsonEncode(res)
       headers = GetHeaders("text/json",msg)
-
       C4:ServerSend(nHandle,  headers .. msg)
       C4:ServerCloseClient(nHandle)
    elseif (gCmd == "project") then
-      --print("Elseif match 2...")
       msg = projectJson
       headers = GetHeaders("text/json",msg)
-
+      C4:ServerSend(nHandle,  headers .. msg)
+      C4:ServerCloseClient(nHandle)
+   elseif (gCmd == "settings") then
+      msg = GetSettingsJson()
+      headers = GetHeaders("application/json",msg)
       C4:ServerSend(nHandle,  headers .. msg)
       C4:ServerCloseClient(nHandle)
    elseif (urlArgs[1] == "png") then
       GetWebFile(gCmd,"image/png",nHandle)
    else
-      --print("Else reached..")
       GetWebFile(gCmd,"text/"..urlArgs[1],nHandle)
    end
-
-   --C4:ServerSend(nHandle,  headers .. msg)
-   --C4:ServerCloseClient(nHandle)
 end
 
---MainHtmlFile = C4:
-
 function GetMainHtml(args1)
-
    if (args1["title"] == nil) then
       args1["title"] = ""
    elseif (args1["artist"] == nil) then
@@ -280,7 +353,6 @@ function GetMainHtml(args1)
    end
 
    mainHtml = [[
-
    <!doctype html>
    <html>
    <head>
@@ -292,7 +364,6 @@ function GetMainHtml(args1)
    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@100;300&display=swap" rel="stylesheet">
    </head>
-
    <body onLoad="populateMetadata()">
    <div id="main-container">
    <div id="date-time-temp-container">
@@ -311,303 +382,32 @@ function GetMainHtml(args1)
    </div>
    </div>
    <div id="metadata-container">
-
    <div id="art-container">
    <img id="art" src="" alt=""/>
    </div>
-
    <div id="metadata-text-container">
    <span id="album" class="text"></span>
    <span id="artist" class="text"></span>
    <span id="title" class="text"></span>
    </div>
-
    </div>
    </div>
    </body>
    </html>
-
    ]]
-
    return mainHtml
-
 end
-
-
-mainCss = [[
-
-
-body {
-   background-color: black;
-   /* background-image: url("template.png"); */
-   /* background-size: 100% 100%; */
-   background-repeat: no-repeat;
-   overflow: hidden;
-   width: 100%;
-   height: 100%;
-   margin:0;
-   padding:0;
-}
-
-#main-container {
-   display: flex;
-   align-items: center;
-   justify-content: center;
-   height: 100vh;
-   /* margin-left: 1%; */
-   /* gap: 1%; */
-   /* margin-right: 3%; */
-}
-
-#metadata-container {
-   display: flex;
-   flex-direction: column;
-   justify-content: center;
-   height: 100vh;
-   width: 66vw;
-   margin-right: 3%;
-}
-
-#date-time-temp-container {
-   width: 33vw;
-   display: flex;
-   flex-direction: column;
-   gap: 13.5vmin;
-   /* align-items: center; */
-   justify-content: center;
-   margin-left: 3%;
-   height: 100%;
-   margin-top: 2vh;
-}
-
-#time, #date, #temp {
-   display: flex;
-   flex-direction: column;
-   align-items: center;
-   gap: 3.5vmin;
-   line-height: 4.5vmin;
-   /* margin-top: 3vh; */
-}
-
-#metadata-text-container {
-   display: flex;
-   flex-direction: column-reverse;
-   align-items: center;
-   /* height: 25%; */
-   margin-bottom: 10%;
-   margin-top: 5.5vmin;
-   gap: 1vh;
-   text-align: center;
-}
-
-#art-container{
-   /* height: 60vh; */
-   margin-top: 24.5vmin;
-   display: flex;
-   /* vertical-align: baseline; */
-   flex-direction: column;
-   flex-wrap: wrap;
-   align-content: center;
-}
-
-#art {
-   position: relative;
-   width: 40vmin;
-   height: 40vmin;
-   /* border: solid; */
-   /* border-color: white; */
-   /* opacity: 50%; */
-}
-
-.text {
-   color: white;
-   font-size: 3.5vw;
-   font-family: "Roboto";
-   font-weight: 100;
-}
-
-#clock, #day, #temp-num {
-   font-size: 12vmin;
-}
-
-#ampm, #dayofweek, #month, #scale {
-   font-size: 3.5vmin;
-}
-
-#temp, #time {
-   margin-top: 4vmin;
-}
-
-#title {
-   font-size: 6.9vmin;
-}
-
-#artist, #album {
-   font-size: 5.35vmin;
-}
-
-#title, #artist, #album {
-   font-weight: 300;
-}
-
-
-]]
-
-mainJs = [[
-
-var original_metadata_container;
-var original_date_time_temp_container;
-
-var clockTimer;
-var metadataTimer;
-var weatherTimer;
-
-var oldData;
-
-function updateClock() {
-
-   var date = new Date()
-
-   var hours = date.getHours();
-   var minutes = date.getMinutes();
-   var days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-   var dayName = days[date.getDay()];
-   var dayNum = date.getDate();
-   var months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-   var monthName = months[date.getMonth()];
-   var ampm = hours >= 12 ? 'PM' : 'AM';
-   hours = hours % 12;
-   hours = hours ? hours : 12; // the hour '0' should be '12'
-   minutes = minutes < 10 ? '0'+minutes : minutes;
-
-   var clock = hours + ':' + minutes;
-
-   document.getElementById("clock").innerHTML = clock;
-   document.getElementById("ampm").innerHTML = ampm;
-   document.getElementById("dayofweek").innerHTML = dayName;
-   document.getElementById("day").innerHTML = dayNum;
-   document.getElementById("month").innerHTML = monthName;
-
-}
-
-function updateMetadata() {
-   var url = window.location.href;
-   var data = urlCall(url+"/json")
-
-   if (data == "{}") {
-      arrangeContent(true,true,true,false)
-   } else if (data != oldData) {
-   arrangeContent(true,true,true,true)
-
-   data = parseJSON(data);
-   document.getElementById("title").innerHTML = data.title || "";
-   document.getElementById("artist").innerHTML = data.artist || "";
-   document.getElementById("album").innerHTML = data.album || "";
-   document.getElementById("art").src = data.img;
-}
-
-oldData = data
-}
-
-function updateWeather() {
-var projectData = urlCall("project")
-projectData = parseJSON(projectData)
-
-var lat = projectData.latitude
-var long = projectData.longitude
-
-var weatherUrl1 = "https://api.weather.gov/points/"+lat+","+long
-var weatherData1 = parseJSON(urlCall(weatherUrl1))
-
-var weatherUrl2 = weatherData1.properties.forecastHourly
-var weatherData2 = parseJSON(urlCall(weatherUrl2))
-
-var temp = weatherData2.properties.periods[0].temperature
-
-var scale = "F"
-
-if (projectData.scale == "CELSIUS") {
-   temp = (temp -32) * 5/9
-   scale = "C"
-}
-
-temp = Math.round(temp)
-
-document.getElementById("temp-num").innerHTML = temp;
-document.getElementById("scale").innerHTML = scale;
-}
-
-function arrangeContent(time,date,weather,media) {
-var metadata_container = document.getElementById("metadata-container")
-var time_container = document.getElementById("time")
-var date_time_temp_container = document.getElementById("date-time-temp-container")
-
-if (media == false) {
-   metadata_container.innerHTML = "";
-   metadata_container.appendChild(time_container);
-   document.getElementById("clock").style.fontSize = "30vmin";
-   document.getElementById("ampm").style.fontSize = "12vmin";
-   document.getElementById("time").style.gap = "15vmin";
-   document.getElementById("metadata-container").style.marginTop = "5vmin";
-
-} else {
-date_time_temp_container.innerHTML = original_date_time_temp_container;
-metadata_container.innerHTML = original_metadata_container;
-document.getElementById("clock").style = "";
-document.getElementById("ampm").style = "";
-document.getElementById("time").style = "";
-document.getElementById("metadata-container").style = "";
-}
-}
-
-function urlCall(url) {
-var xmlHttp = new XMLHttpRequest();
-xmlHttp.open( "GET", url, false ); // false for synchronous request
-xmlHttp.send( null );
-return xmlHttp.responseText;
-}
-
-function parseJSON(json) {
-return JSON.parse(json)
-}
-
-function populateMetadata() {
-original_metadata_container = document.getElementById("metadata-container").innerHTML;
-original_date_time_temp_container = document.getElementById("date-time-temp-container").innerHTML
-
-updateClock()
-updateMetadata()
-updateWeather()
-clockTimer = setInterval('updateClock()',1000)
-metadataTimer = setInterval('updateMetadata()',1000)
-weatherTimer = setInterval('updateWeather()',300000)
-}
-
-]]
-
-----------------------------------------------------------------------------------------------------------
-------------------------------------------------  Modules  -------------------------------------------------
-----------------------------------------------------------------------------------------------------------
-
-print("Driver Loaded..." .. os.date())
 
 project = {}
 
-
------------------------------------------------------
------------------------- INIT ------------------------
------------------------------------------------------
-
 function OnDriverLateInit()
-print("Driver late init...")
+dbg("Driver late init...")
 
 function get(data,name)
 return data:match("<"..name..">(.-)</"..name..">")
 end
 
-
 projectInfo = C4:GetProjectItems()
-
 projectInfo = get(projectInfo,"itemdata")
 projectInfo = "<itemdata>"..projectInfo.."</itemdata>"
 projectInfo = C4:ParseXml(projectInfo)
@@ -619,9 +419,6 @@ project[v["Name"]] = v.Value
 end
 
 projectJson = C4:JsonEncode(project)
-
---print(projectJson)
-
 end
 
 gRecvBuf = ""
@@ -630,4 +427,3 @@ gCmd = ""
 
 OnPropertyChanged("Debug Mode")
 gInitTimer = C4:AddTimer(5, "SECONDS")
-
