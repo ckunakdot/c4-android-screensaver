@@ -20,6 +20,9 @@ This driver replicates official C4 Navigator screensavers by displaying a combin
    - Default port is 8089
 3. That's it! Whenever the room is on, the screensaver will automatically display the current media
 
+OR 
+Use a Axion Android PoE Touch Screen with kisok mode and set the screensaver url.
+
 ## Composer Properties
 
 | Property | Options | Default | Description |
