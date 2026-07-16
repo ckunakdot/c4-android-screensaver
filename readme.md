@@ -9,6 +9,11 @@ This driver replicates official C4 Navigator screensavers by displaying a combin
 
 <img src="https://github.com/13mralex/c4-android-screensaver/blob/main/images/Capture1.PNG?raw=true" width=45%></img>
 <img src="https://github.com/13mralex/c4-android-screensaver/blob/main/images/Capture.PNG?raw=true" width=45%></img>
+<img width="957" height="703" alt="image" src="https://github.com/user-attachments/assets/6320c5dd-71e9-4255-aa1f-6641098e6849" />
+<img width="1041" height="694" alt="image" src="https://github.com/user-attachments/assets/e38bda23-a212-4b3f-8b10-8f15a8221c9f" />
+<img width="1042" height="691" alt="image" src="https://github.com/user-attachments/assets/760fdb71-9f66-4cbc-a461-a2b73d06e6aa" />
+
+
 
 ## How it works:
 1. Find an applicable app from the Play Store
