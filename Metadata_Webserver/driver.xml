@@ -4,7 +4,7 @@
   <model>Metadata Webserver</model>
   <creator>Alex Martin</creator>
   <created>2/4/2022 8:00:00 PM</created>
-  <modified>03/18/2022 4:18 PM</modified>
+  <modified>01/06/2026 1:00 PM</modified>
   <name>Metadata Webserver</name>
   <small>devices_sm\C4.gif</small>
   <large>devices_lg\C4.gif</large>
@@ -34,6 +34,123 @@
         <default>Off</default>
         <readonly>false</readonly>
       </property>
+      <property>
+        <name>HTTP Port</name>
+        <type>STRING</type>
+        <default>8089</default>
+        <readonly>false</readonly>
+      </property>
+      <property>
+        <name>Time Format</name>
+        <type>LIST</type>
+        <items>
+          <item>12 Hour</item>
+          <item>24 Hour</item>
+        </items>
+        <default>12 Hour</default>
+        <readonly>false</readonly>
+      </property>
+      <property>
+        <name>Show Time</name>
+        <type>LIST</type>
+        <items>
+          <item>Yes</item>
+          <item>No</item>
+        </items>
+        <default>Yes</default>
+        <readonly>false</readonly>
+      </property>
+      <property>
+        <name>Show Date</name>
+        <type>LIST</type>
+        <items>
+          <item>Yes</item>
+          <item>No</item>
+        </items>
+        <default>Yes</default>
+        <readonly>false</readonly>
+      </property>
+      <property>
+        <name>Show Weather</name>
+        <type>LIST</type>
+        <items>
+          <item>Yes</item>
+          <item>No</item>
+        </items>
+        <default>Yes</default>
+        <readonly>false</readonly>
+      </property>
+      <property>
+        <name>Show Media</name>
+        <type>LIST</type>
+        <items>
+          <item>Yes</item>
+          <item>No</item>
+        </items>
+        <default>Yes</default>
+        <readonly>false</readonly>
+      </property>
+      <property>
+        <name>Display Mode</name>
+        <type>LIST</type>
+        <items>
+          <item>Normal</item>
+          <item>Big Clock</item>
+        </items>
+        <default>Normal</default>
+        <readonly>false</readonly>
+      </property>
+      <property>
+        <name>Fade Interval</name>
+        <type>LIST</type>
+        <items>
+          <item>30 Seconds</item>
+          <item>1 Minute</item>
+          <item>2 Minutes</item>
+          <item>5 Minutes</item>
+          <item>10 Minutes</item>
+        </items>
+        <default>1 Minute</default>
+        <readonly>false</readonly>
+      </property>
+      <property>
+        <name>Background Color</name>
+        <type>STRING</type>
+        <default>#000000</default>
+        <readonly>false</readonly>
+      </property>
+      <property>
+        <name>Text Color</name>
+        <type>STRING</type>
+        <default>#FFFFFF</default>
+        <readonly>false</readonly>
+      </property>
+      <property>
+        <name>Media Poll Interval</name>
+        <type>LIST</type>
+        <items>
+          <item>1 Second</item>
+          <item>2 Seconds</item>
+          <item>3 Seconds</item>
+          <item>5 Seconds</item>
+          <item>10 Seconds</item>
+        </items>
+        <default>3 Seconds</default>
+        <readonly>false</readonly>
+      </property>
+      <property>
+        <name>Settings Poll Interval</name>
+        <type>LIST</type>
+        <items>
+          <item>5 Seconds</item>
+          <item>10 Seconds</item>
+          <item>30 Seconds</item>
+          <item>60 Seconds</item>
+          <item>5 Minutes</item>
+        </items>
+        <default>60 Seconds</default>
+        <readonly>false</readonly>
+      </property>
     </properties>
     <actions>
       <action>
@@ -47,5 +164,5 @@
   </config>
   <connections />
   <capabilities />
-  <version>1</version>
+  <version>2</version>
 </devicedata>
